@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import json, os, re, ast, operator as op
 from difflib import SequenceMatcher
+from duckduckgo_search import DDGS
 
 app = Flask(__name__)
 CORS(app)
@@ -40,10 +41,6 @@ def safe_calculate(expr):
 
 def solve_math(text):
     text = text.strip().replace("×", "*").replace("÷", "/")
-    if text.replace(" ", "").isdigit():
-        numbers = list(map(int, text.split()))
-        if len(numbers) >= 2:
-            return str(sum(numbers))
     if re.fullmatch(r"[0-9+\-*/. ]+", text):
         try:
             result = safe_calculate(text)
@@ -74,8 +71,24 @@ def smart_match(user_input, memory):
         if score > best_score:
             best_score = score
             best_answer = item["answer"]
-    if best_score > 0.6:  # حد التشابه للقبول
+    if best_score > 0.6:
         return best_answer
+    return None
+
+# ============================
+# البحث في الإنترنت
+# ============================
+def search_web(query):
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.text(query, max_results=1)
+            for r in results:
+                # تنظيف وتقصير النتيجة
+                answer = r["body"]
+                answer = re.sub(r'\s+', ' ', answer)
+                return answer[:500]  # حفظ أول 500 حرف فقط
+    except:
+        return None
     return None
 
 # ============================
@@ -93,37 +106,54 @@ def chat():
     user_input = request.json.get("message", "").strip()
     memory = load_memory()
 
-    # ===== حل المسائل تلقائيًا =====
+    # ===== حل المسائل الحسابية =====
     math_result = solve_math(user_input)
     if math_result:
-        memory.append({"question": user_input, "answer": math_result})
-        save_memory(memory)
         return jsonify({"reply": f"{BOT_NAME}: الناتج هو {math_result} 🧮"})
 
     # ===== البحث في الذاكرة =====
     answer = smart_match(user_input, memory)
     if answer:
         return jsonify({"reply": f"{BOT_NAME}: {answer}"})
-    else:
+
+    # ===== البحث في الإنترنت =====
+    web_result = search_web(user_input)
+
+    if web_result:
+        # منع التكرار
+        exists = any(normalize_text(user_input) == normalize_text(item["question"]) for item in memory)
+        if not exists:
+            memory.append({
+                "question": user_input,
+                "answer": web_result
+            })
+            save_memory(memory)
+
         return jsonify({
-            "reply": f"{BOT_NAME}: لا أعرف الإجابة بعد 🤔\nما هي الإجابة الصحيحة؟",
-            "learn": True
+            "reply": f"{BOT_NAME}: 🌐 وجدت هذه المعلومات:\n\n{web_result}"
         })
 
+    # ===== لو لم يجد =====
+    return jsonify({
+        "reply": f"{BOT_NAME}: لا أعرف الإجابة بعد 🤔\nما هي الإجابة الصحيحة؟",
+        "learn": True
+    })
+
 # ============================
-# API التعلم التلقائي
+# API التعلم اليدوي
 # ============================
 @app.route("/learn", methods=["POST"])
 def learn():
     question = request.json.get("question", "").strip()
     answer = request.json.get("answer", "").strip()
     memory = load_memory()
+
     if question and answer:
         memory.append({"question": question, "answer": answer})
         save_memory(memory)
-        return jsonify({"reply": "🤖 تم التعلم تلقائيًا ✅"})
+        return jsonify({"reply": "🤖 تم التعلم بنجاح ✅"})
     else:
         return jsonify({"reply": "⚠️ يجب كتابة السؤال والإجابة"})
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
