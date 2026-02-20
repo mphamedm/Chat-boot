@@ -7,7 +7,7 @@ from duckduckgo_search import DDGS
 app = Flask(__name__)
 CORS(app)
 
-BOT_NAME = "محسن"
+BOT_NAME = "mohamed moustafa "
 brain_file = "brain.json"
 
 # ============================
