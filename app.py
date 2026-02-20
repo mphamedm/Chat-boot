@@ -17,14 +17,18 @@ def load_memory():
     with open(brain_file, "r", encoding="utf-8") as f:
         return json.load(f)
 
+def save_memory(data):
+    with open(brain_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 # -------------------------
-# تنظيف وتحويل النص لكلمات
+# تنظيف الكلمات
 # -------------------------
 def clean_words(text):
     return text.replace("؟","").replace(".","").replace(",","").strip().lower().split()
 
 # -------------------------
-# البحث عن إجابة بطريقة ذكية
+# مطابقة ذكية
 # -------------------------
 def smart_match(user_input, memory):
     user_words = set(clean_words(user_input))
@@ -33,13 +37,14 @@ def smart_match(user_input, memory):
 
     for item in memory:
         item_words = set(clean_words(item["question"]))
-        common_words = user_words & item_words
-        score = len(common_words) / max(len(user_words), 1)
+        common = user_words & item_words
+        score = len(common) / max(len(user_words), 1)
+
         if score > best_score:
             best_score = score
             best_answer = item["answer"]
 
-    if best_score > 0.3:  # نسبة 30% تعتبر تطابق
+    if best_score > 0.3:
         return best_answer
     return None
 
@@ -58,18 +63,38 @@ def chat():
     user_input = request.json.get("message", "").strip()
     memory = load_memory()
 
-    # سؤال عن الوقت
+    # ===== التعلم اليدوي =====
+    if user_input.startswith("تعلم:"):
+        try:
+            content = user_input.replace("تعلم:", "").strip()
+            question, answer = content.split("=")
+
+            memory.append({
+                "question": question.strip(),
+                "answer": answer.strip()
+            })
+
+            save_memory(memory)
+
+            return jsonify({"reply": "🤖 تم التعلم بنجاح ✅"})
+
+        except:
+            return jsonify({"reply": "⚠️ الصيغة خاطئة.\nاستخدم:\nتعلم: السؤال = الإجابة"})
+
+    # ===== سؤال الوقت =====
     if "الوقت" in user_input:
         now = datetime.datetime.now().strftime("%H:%M")
         return jsonify({"reply": f"{BOT_NAME}: الوقت الآن هو {now}"})
 
-    # البحث عن إجابة ذكية
+    # ===== البحث عن إجابة =====
     answer = smart_match(user_input, memory)
+
     if answer:
         return jsonify({"reply": f"{BOT_NAME}: {answer}"})
-    
-    # إذا لم يجد إجابة
-    return jsonify({"reply": f"{BOT_NAME}: لا أعرف الإجابة بعد."})
+
+    return jsonify({
+        "reply": f"{BOT_NAME}: لا أعرف الإجابة بعد 🤔\nيمكنك تعليمي هكذا:\nتعلم: سؤالك = الإجابة"
+    })
 
 # -------------------------
 if __name__ == "__main__":
