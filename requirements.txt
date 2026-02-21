@@ -1,5 +1,5 @@
-Flask
-psycopg2-binary
-sentence-transformers
-numpy
+flask
+flask-cors
+google-generativeai
 gunicorn
+psycopg2-binary
