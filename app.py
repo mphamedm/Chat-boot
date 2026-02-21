@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 
 app = Flask(__name__)
 
-BOT_NAME = "محسن"
+BOT_NAME = "chat bot"
 API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
