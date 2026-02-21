@@ -6,18 +6,18 @@ from difflib import SequenceMatcher
 
 app = Flask(__name__)
 
-BOT_NAME = "chat bot"
+BOT_NAME = "Shat Bot"
 API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # -----------------------------
-# التحقق من وجود API Key
+# التحقق من API Key
 # -----------------------------
 if not API_KEY:
-    print("⚠️ API KEY غير موجود! أضفه في Environment Variables على Render")
+    print("⚠️ API KEY غير موجود! أضفه في Environment Variables على Render أو VPS")
 
 # -----------------------------
-# إنشاء جدول المحادثات
+# إنشاء جدول الذاكرة
 # -----------------------------
 def init_db():
     try:
@@ -41,7 +41,7 @@ def init_db():
 init_db()
 
 # -----------------------------
-# البحث عن سؤال مشابه في الذاكرة
+# البحث في الذاكرة
 # -----------------------------
 def search_memory(question):
     conn = psycopg2.connect(DATABASE_URL)
@@ -63,18 +63,21 @@ def search_memory(question):
     return None
 
 # -----------------------------
-# حفظ سؤال وجواب في قاعدة البيانات
+# حفظ سؤال وجواب
 # -----------------------------
 def save_memory(question, answer):
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO memory (question, answer) VALUES (%s, %s)",
-        (question, answer)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO memory (question, answer) VALUES (%s, %s)",
+            (question, answer)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("❌ Save Memory Error:", e)
 
 # -----------------------------
 # الصفحة الرئيسية
@@ -84,7 +87,7 @@ def home():
     return render_template("index.html")
 
 # -----------------------------
-# API الدردشة
+# API الشات
 # -----------------------------
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -92,14 +95,14 @@ def chat():
     user_answer = request.json.get("answer", "").strip()
 
     if not user_message:
-        return jsonify({"reply": "اكتب رسالة أولاً"})
+        return jsonify({"reply": "اكتب سؤالاً أولاً"})
 
-    # 1️⃣ البحث في الذاكرة أولاً (إذا تريد)
+    # 1️⃣ البحث في الذاكرة أولاً
     memory_answer = search_memory(user_message)
     if memory_answer:
-        return jsonify({"reply": f"{BOT_NAME}: {memory_answer} })
+        return jsonify({"reply": f"{memory_answer}"})
 
-    # 2️⃣ إرسال السؤال أولًا إلى API
+    # 2️⃣ إرسال السؤال إلى API أولاً إذا مفتاح موجود
     if API_KEY:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={API_KEY}"
@@ -111,39 +114,21 @@ def chat():
 
             if "candidates" in result and result["candidates"]:
                 bot_reply = result["candidates"][0]["content"]["parts"][0]["text"]
-                # حفظ السؤال والجواب
+                # حفظ السؤال والجواب تلقائيًا
                 save_memory(user_message, bot_reply)
-                return jsonify({"reply": f"{BOT_NAME}: {bot_reply} 🤖 (من API)"})
+                return jsonify({"reply": f"{bot_reply}"})
         except Exception as e:
             print("API Error:", e)
 
-    # 3️⃣ إذا API فشل أو لا يعطي جواب → نطلب الإجابة من المستخدم
+    # 3️⃣ إذا لم يتمكن API من الرد → نطلب الإجابة من المستخدم
     if user_answer:
         save_memory(user_message, user_answer)
-        return jsonify({"reply": f"{BOT_NAME}: شكرًا! لقد تعلمت الإجابة ✅"})
+        return jsonify({"reply": f"شكراً! لقد تعلمت الإجابة ✅"})
 
     return jsonify({
-        "reply": f"{BOT_NAME}: لم أتمكن من الإجابة 🤔\nهل يمكنك إعطائي الإجابة؟",
+        "reply": "لم أتمكن من الإجابة 🤔 هل يمكنك إعطائي الإجابة؟",
         "learn": True
     })
-
-# -----------------------------
-# عرض آخر المحادثات
-# -----------------------------
-@app.route("/history")
-def history():
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        cur.execute("SELECT question, answer, created_at FROM memory ORDER BY id DESC LIMIT 20")
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-
-        data = [{"question": r[0], "answer": r[1], "time": str(r[2])} for r in rows]
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)})
 
 # -----------------------------
 # تشغيل التطبيق
