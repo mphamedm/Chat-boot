@@ -11,7 +11,13 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # -----------------------------
-# إنشاء جدول المحادثات إذا لم يكن موجود
+# التحقق من وجود API Key
+# -----------------------------
+if not API_KEY:
+    print("⚠️ API KEY غير موجود! أضفه في Environment Variables على Render")
+
+# -----------------------------
+# إنشاء جدول المحادثات
 # -----------------------------
 def init_db():
     try:
@@ -47,13 +53,11 @@ def search_memory(question):
 
     best_score = 0
     best_answer = None
-
     for q, a in rows:
         score = SequenceMatcher(None, question.lower(), q.lower()).ratio()
         if score > best_score:
             best_score = score
             best_answer = a
-
     if best_score > 0.75:
         return best_answer
     return None
@@ -85,6 +89,7 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "").strip()
+    user_answer = request.json.get("answer", "").strip()  # إذا المستخدم يعطي الإجابة
 
     if not user_message:
         return jsonify({"reply": "اكتب رسالة أولاً"})
@@ -94,33 +99,19 @@ def chat():
     if memory_answer:
         return jsonify({"reply": f"{BOT_NAME}: {memory_answer} 🧠 (من الذاكرة)"})
 
-    # 2️⃣ إذا لم يوجد → اسأل Gemini
-    if not API_KEY:
-        return jsonify({"reply": "⚠️ API KEY غير موجود"})
+    # 2️⃣ إذا المستخدم أعطى الإجابة → خزنها
+    if user_answer:
+        save_memory(user_message, user_answer)
+        return jsonify({"reply": f"{BOT_NAME}: شكرًا! لقد تعلمت الإجابة ✅"})
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": user_message}]}]}
-
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        result = response.json()
-
-        if "candidates" not in result:
-            return jsonify({"reply": "⚠️ خطأ في Gemini API"})
-
-        bot_reply = result["candidates"][0]["content"]["parts"][0]["text"]
-
-        # 3️⃣ حفظ السؤال والجواب في قاعدة البيانات
-        save_memory(user_message, bot_reply)
-
-        return jsonify({"reply": f"{BOT_NAME}: {bot_reply} 🤖 (تعلمت منك)"})
-
-    except Exception as e:
-        return jsonify({"reply": f"حدث خطأ: {str(e)}"})
+    # 3️⃣ لم يعرف → يطلب من المستخدم الإجابة
+    return jsonify({
+        "reply": f"{BOT_NAME}: لا أعرف الإجابة بعد 🤔\nهل يمكنك إعطائي الإجابة؟",
+        "learn": True
+    })
 
 # -----------------------------
-# عرض المحادثات الأخيرة (اختبار)
+# عرض آخر المحادثات
 # -----------------------------
 @app.route("/history")
 def history():
