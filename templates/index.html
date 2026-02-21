@@ -2,35 +2,157 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>mohamed moustafa </title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🤖 محسن AI</title>
 <style>
-body { background:#111; color:white; font-family:Arial; text-align:center; }
-input { width:60%; padding:10px; }
-button { padding:10px; }
-#chat { margin-top:20px; }
+  body {
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  #chat {
+    width: 100%;
+    max-width: 600px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    height: 400px;
+    border-bottom: 1px solid #ddd;
+  }
+  .message {
+    padding: 10px 15px;
+    margin: 5px 0;
+    border-radius: 20px;
+    max-width: 80%;
+    word-wrap: break-word;
+  }
+  .user {
+    background: #d1e7ff;
+    align-self: flex-end;
+    text-align: right;
+  }
+  .bot {
+    background: #e2ffe2;
+    align-self: flex-start;
+    text-align: left;
+  }
+  #inputArea {
+    display: flex;
+    padding: 10px;
+    gap: 10px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid #ccc;
+  }
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: none;
+    background: #4caf50;
+    color: white;
+    cursor: pointer;
+  }
+  #answerBox {
+    display: none;
+    padding: 10px;
+    border-top: 1px solid #ddd;
+    gap: 10px;
+    display: flex;
+  }
 </style>
 </head>
 <body>
+<div id="chat">
+  <div id="messages"></div>
 
-<h1>🤖 محسن AI</h1>
+  <div id="inputArea">
+    <input type="text" id="userMessage" placeholder="اكتب سؤالك هنا...">
+    <button onclick="sendMessage()">إرسال</button>
+  </div>
 
-<input type="text" id="message" placeholder="اكتب سؤالك...">
-<button onclick="send()">إرسال</button>
-
-<div id="chat"></div>
+  <div id="answerBox">
+    <input type="text" id="userAnswer" placeholder="أدخل الإجابة ليتم التعلم منها">
+    <button onclick="sendAnswer()">تعلم</button>
+  </div>
+</div>
 
 <script>
-async function send() {
-    let msg = document.getElementById("message").value;
-    let res = await fetch("/chat", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({message: msg})
-    });
-    let data = await res.json();
-    document.getElementById("chat").innerHTML += "<p>" + data.reply + "</p>";
-}
-</script>
+let pendingQuestion = "";
 
+function addMessage(text, sender) {
+  const div = document.createElement("div");
+  div.classList.add("message", sender);
+  div.innerText = text;
+  document.getElementById("messages").appendChild(div);
+  document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+}
+
+async function sendMessage() {
+  const msgInput = document.getElementById("userMessage");
+  const message = msgInput.value.trim();
+  if (!message) return;
+  addMessage("أنت: " + message, "user");
+  msgInput.value = "";
+
+  const res = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: message })
+  });
+
+  const data = await res.json();
+
+  addMessage("محسن: " + data.reply, "bot");
+
+  if (data.learn) {
+    pendingQuestion = message;
+    document.getElementById("answerBox").style.display = "flex";
+  }
+}
+
+async function sendAnswer() {
+  const answerInput = document.getElementById("userAnswer");
+  const answer = answerInput.value.trim();
+  if (!answer || !pendingQuestion) return;
+
+  const res = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: pendingQuestion, answer: answer })
+  });
+
+  const data = await res.json();
+
+  addMessage("أنت علمت البوت: " + answer, "user");
+  addMessage("محسن: " + data.reply, "bot");
+
+  answerInput.value = "";
+  pendingQuestion = "";
+  document.getElementById("answerBox").style.display = "none";
+}
+
+// جعل Enter يرسل الرسالة
+document.getElementById("userMessage").addEventListener("keyup", function(e){
+  if(e.key === "Enter"){ sendMessage(); }
+});
+document.getElementById("userAnswer").addEventListener("keyup", function(e){
+  if(e.key === "Enter"){ sendAnswer(); }
+});
+</script>
 </body>
 </html>
