@@ -1,8 +1,6 @@
 from flask import Flask, request, jsonify, render_template
 import psycopg2
 import os
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 app = Flask(__name__)
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -10,14 +8,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 def get_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
-def get_all_questions():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT question, answer FROM memory")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return rows
+def simple_similarity(a, b):
+    a_words = set(a.split())
+    b_words = set(b.split())
+    return len(a_words & b_words) / max(len(a_words), 1)
 
 @app.route("/")
 def home():
@@ -28,24 +22,23 @@ def ask():
     data = request.json
     user_question = data["question"]
 
-    rows = get_all_questions()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT question, answer FROM memory")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
 
-    if not rows:
-        return jsonify({"answer": "لا توجد بيانات بعد"})
+    best_score = 0
+    best_answer = "لا أعرف الإجابة 🤖"
 
-    questions = [row[0] for row in rows]
-    answers = [row[1] for row in rows]
+    for q, a in rows:
+        score = simple_similarity(user_question, q)
+        if score > best_score:
+            best_score = score
+            best_answer = a
 
-    vectorizer = TfidfVectorizer()
-    vectors = vectorizer.fit_transform(questions + [user_question])
-
-    similarity = cosine_similarity(
-        vectors[-1], vectors[:-1]
-    )
-
-    best_match_index = similarity.argmax()
-
-    if similarity[0][best_match_index] > 0.3:
-        return jsonify({"answer": answers[best_match_index]})
+    if best_score > 0.3:
+        return jsonify({"answer": best_answer})
     else:
         return jsonify({"answer": "لا أعرف الإجابة 🤖"})
