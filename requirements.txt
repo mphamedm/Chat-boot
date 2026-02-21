@@ -1,5 +1,5 @@
-flask
-flask-cors
-google-generativeai
-gunicorn
+Flask
 psycopg2-binary
+sentence-transformers
+numpy
+gunicorn
