@@ -89,24 +89,41 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "").strip()
-    user_answer = request.json.get("answer", "").strip()  # إذا المستخدم يعطي الإجابة
+    user_answer = request.json.get("answer", "").strip()
 
     if not user_message:
         return jsonify({"reply": "اكتب رسالة أولاً"})
 
-    # 1️⃣ البحث في الذاكرة
+    # 1️⃣ البحث في الذاكرة أولاً (إذا تريد)
     memory_answer = search_memory(user_message)
     if memory_answer:
         return jsonify({"reply": f"{BOT_NAME}: {memory_answer} 🧠 (من الذاكرة)"})
 
-    # 2️⃣ إذا المستخدم أعطى الإجابة → خزنها
+    # 2️⃣ إرسال السؤال أولًا إلى API
+    if API_KEY:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={API_KEY}"
+            headers = {"Content-Type": "application/json"}
+            payload = {"contents": [{"parts": [{"text": user_message}]}]}
+
+            response = requests.post(url, headers=headers, json=payload)
+            result = response.json()
+
+            if "candidates" in result and result["candidates"]:
+                bot_reply = result["candidates"][0]["content"]["parts"][0]["text"]
+                # حفظ السؤال والجواب
+                save_memory(user_message, bot_reply)
+                return jsonify({"reply": f"{BOT_NAME}: {bot_reply} 🤖 (من API)"})
+        except Exception as e:
+            print("API Error:", e)
+
+    # 3️⃣ إذا API فشل أو لا يعطي جواب → نطلب الإجابة من المستخدم
     if user_answer:
         save_memory(user_message, user_answer)
         return jsonify({"reply": f"{BOT_NAME}: شكرًا! لقد تعلمت الإجابة ✅"})
 
-    # 3️⃣ لم يعرف → يطلب من المستخدم الإجابة
     return jsonify({
-        "reply": f"{BOT_NAME}: لا أعرف الإجابة بعد 🤔\nهل يمكنك إعطائي الإجابة؟",
+        "reply": f"{BOT_NAME}: لم أتمكن من الإجابة 🤔\nهل يمكنك إعطائي الإجابة؟",
         "learn": True
     })
 
