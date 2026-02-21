@@ -1,4 +1,5 @@
-Flask
-psycopg2-binary
-scikit-learn
+flask
+flask-cors
+google-generativeai
 gunicorn
+psycopg2-binary
