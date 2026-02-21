@@ -2,66 +2,35 @@
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>بوت محسن</title>
+<title>AI Bot</title>
 <style>
-body { font-family: Arial; background: #f4f4f4; }
-#chat { max-width: 600px; margin: 50px auto; background: #fff; padding: 20px; border-radius: 10px; }
-.message { margin: 10px 0; }
-.user { text-align: right; color: blue; }
-.bot { text-align: left; color: green; }
-#input { width: 80%; padding: 10px; }
-#send { padding: 10px; }
+body { font-family: Arial; background:#111; color:white; text-align:center; }
+input { width:60%; padding:10px; }
+button { padding:10px; }
+#chat { margin-top:20px; }
 </style>
 </head>
 <body>
-<div id="chat">
-  <div class="message bot">🤖 مرحبًا! اسألني أي شيء.</div>
-</div>
-<input type="text" id="input" placeholder="اكتب سؤالك هنا">
-<button id="send">إرسال</button>
+
+<h1>🤖 mohamed moustafa </h1>
+
+<input type="text" id="message" placeholder="اكتب سؤالك...">
+<button onclick="send()">إرسال</button>
+
+<div id="chat"></div>
 
 <script>
-let lastQuestion = "";
-
-function addMessage(text, cls) {
-  const chat = document.getElementById("chat");
-  const div = document.createElement("div");
-  div.className = "message " + cls;
-  div.textContent = text;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-}
-
-document.getElementById("send").addEventListener("click", async () => {
-  const input = document.getElementById("input");
-  const msg = input.value.trim();
-  if(!msg) return;
-  addMessage(msg, "user");
-  input.value = "";
-
-  const res = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: msg })
-  });
-  const data = await res.json();
-  addMessage(data.reply, "bot");
-
-  if(data.learn){
-    lastQuestion = msg;
-    let answer = prompt("لم أعرف الإجابة 😅\nأدخل الإجابة الصحيحة:");
-    if(answer){
-      const learnRes = await fetch("/learn", {
+async function send() {
+    let msg = document.getElementById("message").value;
+    let res = await fetch("/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: lastQuestion, answer: answer })
-      });
-      const learnData = await learnRes.json();
-      addMessage(learnData.reply, "bot");
-    }
-  }
-});
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({message: msg})
+    });
+    let data = await res.json();
+    document.getElementById("chat").innerHTML += "<p>" + data.reply + "</p>";
+}
 </script>
+
 </body>
 </html>
