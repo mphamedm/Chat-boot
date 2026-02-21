@@ -97,7 +97,7 @@ def chat():
     # 1️⃣ البحث في الذاكرة أولاً (إذا تريد)
     memory_answer = search_memory(user_message)
     if memory_answer:
-        return jsonify({"reply": f"{BOT_NAME}: {memory_answer} 🧠 (من الذاكرة)"})
+        return jsonify({"reply": f"{BOT_NAME}: {memory_answer} })
 
     # 2️⃣ إرسال السؤال أولًا إلى API
     if API_KEY:
