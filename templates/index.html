@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🤖 محسن AI</title>
+<title>🤖 chat boot AI</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -60,7 +60,7 @@
   }
   button {
     padding: 10px 20px;
-    font-size: 16px;
+    font-size: 14px;
     border-radius: 12px;
     border: none;
     background: #4caf50;
@@ -117,7 +117,7 @@ async function sendMessage() {
 
   const data = await res.json();
 
-  addMessage("محسن: " + data.reply, "bot");
+  addMessage("chat bot: " + data.reply, "bot");
 
   if (data.learn) {
     pendingQuestion = message;
@@ -139,7 +139,7 @@ async function sendAnswer() {
   const data = await res.json();
 
   addMessage("أنت علمت البوت: " + answer, "user");
-  addMessage("محسن: " + data.reply, "bot");
+  addMessage("chat bot : " + data.reply, "bot");
 
   answerInput.value = "";
   pendingQuestion = "";
