@@ -1,57 +1,44 @@
 from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
-import google.generativeai as genai
-import psycopg2
+import requests
 import os
+import psycopg2
 from difflib import SequenceMatcher
 
 app = Flask(__name__)
-CORS(app)
 
 BOT_NAME = "محسن"
-
-# ===============================
-# إعداد Gemini API
-# ===============================
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
-
-def ask_ai(prompt):
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except:
-        return None
-
-# ===============================
-# إعداد قاعدة البيانات
-# ===============================
+API_KEY = os.environ.get("GEMINI_API_KEY")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-def get_connection():
-    return psycopg2.connect(DATABASE_URL)
-
+# -----------------------------
+# إنشاء جدول المحادثات إذا لم يكن موجود
+# -----------------------------
 def init_db():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS memory (
-            id SERIAL PRIMARY KEY,
-            question TEXT,
-            answer TEXT
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS memory (
+                id SERIAL PRIMARY KEY,
+                question TEXT,
+                answer TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("✅ Database Ready")
+    except Exception as e:
+        print("❌ Database Error:", e)
 
 init_db()
 
-# ===============================
-# البحث في الذاكرة
-# ===============================
+# -----------------------------
+# البحث عن سؤال مشابه في الذاكرة
+# -----------------------------
 def search_memory(question):
-    conn = get_connection()
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute("SELECT question, answer FROM memory")
     rows = cur.fetchall()
@@ -71,8 +58,11 @@ def search_memory(question):
         return best_answer
     return None
 
+# -----------------------------
+# حفظ سؤال وجواب في قاعدة البيانات
+# -----------------------------
 def save_memory(question, answer):
-    conn = get_connection()
+    conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO memory (question, answer) VALUES (%s, %s)",
@@ -82,52 +72,73 @@ def save_memory(question, answer):
     cur.close()
     conn.close()
 
-# ===============================
-# الصفحات
-# ===============================
+# -----------------------------
+# الصفحة الرئيسية
+# -----------------------------
 @app.route("/")
 def home():
     return render_template("index.html")
 
+# -----------------------------
+# API الدردشة
+# -----------------------------
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_input = request.json.get("message", "").strip()
+    user_message = request.json.get("message", "").strip()
 
-    if not user_input:
+    if not user_message:
         return jsonify({"reply": "اكتب رسالة أولاً"})
 
     # 1️⃣ البحث في الذاكرة
-    memory_answer = search_memory(user_input)
+    memory_answer = search_memory(user_message)
     if memory_answer:
-        return jsonify({"reply": f"{BOT_NAME}: {memory_answer} 🧠"})
+        return jsonify({"reply": f"{BOT_NAME}: {memory_answer} 🧠 (من الذاكرة)"})
 
-    # 2️⃣ سؤال الذكاء الاصطناعي
-    ai_response = ask_ai(user_input)
+    # 2️⃣ إذا لم يوجد → اسأل Gemini
+    if not API_KEY:
+        return jsonify({"reply": "⚠️ API KEY غير موجود"})
 
-    if ai_response:
-        save_memory(user_input, ai_response)
-        return jsonify({"reply": f"{BOT_NAME}: {ai_response} 🤖"})
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    payload = {"contents": [{"parts": [{"text": user_message}]}]}
 
-    return jsonify({"reply": "حدث خطأ، حاول مرة أخرى"})
-
-# ===============================
-# اختبار قاعدة البيانات
-# ===============================
-@app.route("/test-db")
-def test_db():
     try:
-        conn = get_connection()
+        response = requests.post(url, headers=headers, json=payload)
+        result = response.json()
+
+        if "candidates" not in result:
+            return jsonify({"reply": "⚠️ خطأ في Gemini API"})
+
+        bot_reply = result["candidates"][0]["content"]["parts"][0]["text"]
+
+        # 3️⃣ حفظ السؤال والجواب في قاعدة البيانات
+        save_memory(user_message, bot_reply)
+
+        return jsonify({"reply": f"{BOT_NAME}: {bot_reply} 🤖 (تعلمت منك)"})
+
+    except Exception as e:
+        return jsonify({"reply": f"حدث خطأ: {str(e)}"})
+
+# -----------------------------
+# عرض المحادثات الأخيرة (اختبار)
+# -----------------------------
+@app.route("/history")
+def history():
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
-        cur.execute("SELECT 1;")
-        cur.fetchone()
+        cur.execute("SELECT question, answer, created_at FROM memory ORDER BY id DESC LIMIT 20")
+        rows = cur.fetchall()
         cur.close()
         conn.close()
-        return "✅ Database Connected Successfully!"
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
 
-# ===============================
+        data = [{"question": r[0], "answer": r[1], "time": str(r[2])} for r in rows]
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+# -----------------------------
 # تشغيل التطبيق
-# ===============================
+# -----------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
